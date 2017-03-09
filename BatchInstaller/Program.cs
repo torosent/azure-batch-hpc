@@ -1,4 +1,3 @@
-﻿
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -32,7 +31,7 @@ namespace BatchInstaller
         private const string JobId = "EncodingJobs";
         private const string appContainerName = "encodersim";
         private const string encoderZip = "wsc.zip";
-        private static int targetVMs = 4;
+        private static int targetVMs = 1;
         public static void Main(string[] args)
         {
 
@@ -244,7 +243,7 @@ namespace BatchInstaller
                 //Ensure only 1 EncoderSim runs on each node
                 pool.TaskSchedulingPolicy = new TaskSchedulingPolicy(ComputeNodeFillType.Pack);
                 pool.MaxTasksPerComputeNode = 1;
-
+                
                 // Create and assign the StartTask that will be executed when compute nodes join the pool.
                 // In this case, we copy the StartTask's resource files (that will be automatically downloaded
                 // to the node by the StartTask) into the shared directory that all tasks will have access to.
@@ -294,7 +293,7 @@ namespace BatchInstaller
         /// <param name="jobId">The id of the job to be created.</param>
         /// <param name="poolId">The id of the <see cref="CloudPool"/> in which to create the job.</param>
         /// <returns>A <see cref="System.Threading.Tasks.Task"/> object that represents the asynchronous operation.</returns>
-           private static async Task CreateJobAsync(BatchClient batchClient, string jobId, string poolId)
+        private static async Task CreateJobAsync(BatchClient batchClient, string jobId, string poolId)
         {
 
 
@@ -312,6 +311,7 @@ namespace BatchInstaller
 
                     }
                     System.Threading.Thread.Sleep(5000);
+
                     await CreateJob(batchClient, jobId, poolId);
                 }
                 else // Only create new tasks for new VM's
@@ -329,14 +329,23 @@ namespace BatchInstaller
             }
             else
             {
+                
                 await CreateJob(batchClient, jobId, poolId);
             }
             
 
         }
-
+        /// <summary>
+        /// Create job
+        /// </summary>
+        /// <param name="batchClient"></param>
+        /// <param name="jobId"></param>
+        /// <param name="poolId"></param>
+        /// <returns></returns>
         private static async Task CreateJob(BatchClient batchClient, string jobId, string poolId)
         {
+            var pool = await batchClient.PoolOperations.GetPoolAsync(PoolId);
+            targetVMs = pool.TargetDedicated.Value;
             Console.WriteLine("Creating job [{0}]...", jobId);
             CloudJob job = batchClient.JobOperations.CreateJob();
             job.Id = jobId;
@@ -346,7 +355,12 @@ namespace BatchInstaller
 
             await job.CommitAsync();
         }
-
+        /// <summary>
+        /// Check if job exist
+        /// </summary>
+        /// <param name="batchClient"></param>
+        /// <param name="jobId"></param>
+        /// <returns></returns>
         private static bool CheckIfJobExist(BatchClient batchClient, string jobId)
         {
             var joblist = batchClient.JobOperations.ListJobs();
@@ -374,11 +388,12 @@ namespace BatchInstaller
             // node's shared directory with the pool's StartTask, we can access it via
             // the shared directory on whichever node each task will run.
 
+            CleanupNonRunningTasks(batchClient,jobId);
 
             // Create a collection to hold the tasks that we'll be adding to the job
             List<CloudTask> tasks = new List<CloudTask>();
             var pool = await batchClient.PoolOperations.GetPoolAsync(PoolId);
-            targetVMs = pool.TargetDedicated.Value;
+
             for (int i = 0; i < targetVMs; i++)
             {
                 Console.WriteLine("Adding {0} tasks to job [{1}]...", 2, jobId);
@@ -386,7 +401,7 @@ namespace BatchInstaller
                 string ziptaskCommandLine = String.Format($"cmd /c %AZ_BATCH_NODE_SHARED_DIR%\\7z.exe x -aoa -o%AZ_BATCH_NODE_SHARED_DIR% %AZ_BATCH_NODE_SHARED_DIR%\\{encoderZip}");
                 CloudTask ziptask = new CloudTask(ziptaskId, ziptaskCommandLine);
                 tasks.Add(ziptask);
-
+               
 
                 string taskId = $"EncoderSim-{Guid.NewGuid().ToString()}";
                 string taskCommandLine = String.Format($"cmd /c %AZ_BATCH_NODE_SHARED_DIR%\\{appContainerName}\\EncoderSim.exe");
@@ -404,7 +419,14 @@ namespace BatchInstaller
             return tasks;
         }
 
-
+        private static  void CleanupNonRunningTasks(BatchClient batchClient,string jobId)
+        {
+            var tasks = batchClient.JobOperations.ListTasks(jobId).Where(x => x.State != TaskState.Running);
+            foreach (var task in tasks)
+            {
+                task.Delete();
+            } 
+        }
         /// <summary>
         /// Processes all exceptions inside an <see cref="AggregateException"/> and writes each inner exception to the console.
         /// </summary>
