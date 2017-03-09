@@ -1,3 +1,4 @@
+
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -31,7 +32,7 @@ namespace BatchInstaller
         private const string JobId = "EncodingJobs";
         private const string appContainerName = "encodersim";
         private const string encoderZip = "wsc.zip";
-        private static int targetVMs = 1;
+        private static int targetVMs = 4;
         public static void Main(string[] args)
         {
 
@@ -237,13 +238,13 @@ namespace BatchInstaller
                 pool = batchClient.PoolOperations.CreatePool(
                     poolId: poolId,
                     targetDedicated: targetVMs,                                                         // 3 compute nodes
-                    virtualMachineSize: "Standard_D3_V2",
+                    virtualMachineSize: "Standard_D2_V2",
                     virtualMachineConfiguration: new VirtualMachineConfiguration(new ImageReference("WindowsServer", "MicrosoftWindowsServer", "2016-Datacenter"), "batch.node.windows amd64"));
 
                 //Ensure only 1 EncoderSim runs on each node
                 pool.TaskSchedulingPolicy = new TaskSchedulingPolicy(ComputeNodeFillType.Pack);
                 pool.MaxTasksPerComputeNode = 1;
-                
+               
                 // Create and assign the StartTask that will be executed when compute nodes join the pool.
                 // In this case, we copy the StartTask's resource files (that will be automatically downloaded
                 // to the node by the StartTask) into the shared directory that all tasks will have access to.
@@ -352,6 +353,12 @@ namespace BatchInstaller
 
             job.PoolInformation = new PoolInformation { PoolId = poolId };
             job.UsesTaskDependencies = true;
+            
+            job.JobPreparationTask = new JobPreparationTask()
+            {
+                Id = $"ExtractZip-{Guid.NewGuid().ToString()}",
+                CommandLine = String.Format($"cmd /c %AZ_BATCH_NODE_SHARED_DIR%\\7z.exe x -aoa -o%AZ_BATCH_NODE_SHARED_DIR% %AZ_BATCH_NODE_SHARED_DIR%\\{encoderZip}")
+            };
 
             await job.CommitAsync();
         }
@@ -396,18 +403,12 @@ namespace BatchInstaller
 
             for (int i = 0; i < targetVMs; i++)
             {
-                Console.WriteLine("Adding {0} tasks to job [{1}]...", 2, jobId);
-                string ziptaskId = $"ExtractZip-{Guid.NewGuid().ToString()}" ;
-                string ziptaskCommandLine = String.Format($"cmd /c %AZ_BATCH_NODE_SHARED_DIR%\\7z.exe x -aoa -o%AZ_BATCH_NODE_SHARED_DIR% %AZ_BATCH_NODE_SHARED_DIR%\\{encoderZip}");
-                CloudTask ziptask = new CloudTask(ziptaskId, ziptaskCommandLine);
-                tasks.Add(ziptask);
-               
-
+                Console.WriteLine("Adding {0} tasks to job [{1}]...", 1, jobId);
+            
                 string taskId = $"EncoderSim-{Guid.NewGuid().ToString()}";
                 string taskCommandLine = String.Format($"cmd /c %AZ_BATCH_NODE_SHARED_DIR%\\{appContainerName}\\EncoderSim.exe");
                 CloudTask task = new CloudTask(taskId, taskCommandLine);
-
-                task.DependsOn = TaskDependencies.OnIds(ziptaskId);
+             
                 tasks.Add(task);
             }
 
