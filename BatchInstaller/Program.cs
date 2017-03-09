@@ -258,7 +258,7 @@ namespace BatchInstaller
                     // Since a successful execution of robocopy can return a non-zero exit code (e.g. 1 when one or
                     // more files were successfully copied) we need to manually exit with a 0 for Batch to recognize
                     // StartTask execution success.
-                    CommandLine = $"cmd /c (robocopy %AZ_BATCH_TASK_WORKING_DIR% %AZ_BATCH_NODE_SHARED_DIR%) ^& IF %ERRORLEVEL% LEQ 1 exit 0",
+                    CommandLine = $"cmd /c (robocopy %AZ_BATCH_TASK_WORKING_DIR% %AZ_BATCH_NODE_SHARED_DIR% /it /is) ^& IF %ERRORLEVEL% LEQ 1 exit 0",
                     ResourceFiles = resourceFiles,
                     WaitForSuccess = true,
 
