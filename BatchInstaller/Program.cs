@@ -294,13 +294,13 @@ namespace BatchInstaller
         /// <param name="jobId">The id of the job to be created.</param>
         /// <param name="poolId">The id of the <see cref="CloudPool"/> in which to create the job.</param>
         /// <returns>A <see cref="System.Threading.Tasks.Task"/> object that represents the asynchronous operation.</returns>
-        private static async Task CreateJobAsync(BatchClient batchClient, string jobId, string poolId)
+           private static async Task CreateJobAsync(BatchClient batchClient, string jobId, string poolId)
         {
 
 
             if (CheckIfJobExist(batchClient, jobId))
             {
-                Console.WriteLine("Job [{0}] already exists. Do you want to upgrade the entire cluster?", jobId);
+                Console.Write("Job [{0}] already exists. Do you want to upgrade the entire cluster?", jobId);
                 var answer =Console.ReadLine().ToLower();
                 if (answer == "y")
                 {
@@ -312,14 +312,7 @@ namespace BatchInstaller
 
                     }
                     System.Threading.Thread.Sleep(5000);
-                    Console.WriteLine("Creating job [{0}]...", jobId);  
-                    CloudJob job = batchClient.JobOperations.CreateJob();
-                    job.Id = jobId;
-
-                    job.PoolInformation = new PoolInformation { PoolId = poolId };
-                    job.UsesTaskDependencies = true;
-
-                    await job.CommitAsync();
+                    await CreateJob(batchClient, jobId, poolId);
                 }
                 else // Only create new tasks for new VM's
                 {
@@ -334,8 +327,24 @@ namespace BatchInstaller
                     }
                 }
             }
+            else
+            {
+                await CreateJob(batchClient, jobId, poolId);
+            }
             
 
+        }
+
+        private static async Task CreateJob(BatchClient batchClient, string jobId, string poolId)
+        {
+            Console.WriteLine("Creating job [{0}]...", jobId);
+            CloudJob job = batchClient.JobOperations.CreateJob();
+            job.Id = jobId;
+
+            job.PoolInformation = new PoolInformation { PoolId = poolId };
+            job.UsesTaskDependencies = true;
+
+            await job.CommitAsync();
         }
 
         private static bool CheckIfJobExist(BatchClient batchClient, string jobId)
